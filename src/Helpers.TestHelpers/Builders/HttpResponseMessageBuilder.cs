@@ -4,6 +4,9 @@ using System.Text.Json;
 
 namespace Helpers.TestHelpers.Builders
 {
+    /// <summary>
+    /// Can be used to build HttpResponseMessages.
+    /// </summary>
     public class HttpResponseMessageBuilder
     {
         private HttpStatusCode _statusCode;

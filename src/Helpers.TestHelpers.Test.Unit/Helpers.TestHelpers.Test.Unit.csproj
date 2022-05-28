@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Helpers\Helpers.TestHelpers.csproj" />
+    <ProjectReference Include="..\Helpers.TestHelpers\Helpers.TestHelpers.csproj" />
   </ItemGroup>
 
 </Project>

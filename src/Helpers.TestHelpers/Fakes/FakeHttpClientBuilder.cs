@@ -2,6 +2,9 @@
 
 namespace TestHelpers.Fakes
 {
+    /// <summary>
+    /// Can be used to build a fake http client that you can configure to give specific responses to requests.
+    /// </summary>
     public class FakeHttpClientBuilder
     {
         private readonly string _baseUrl;
@@ -12,7 +15,15 @@ namespace TestHelpers.Fakes
             _baseUrl = baseUrl;
         }
 
-        public FakeHttpClientBuilder AddResponse(HttpMethod httpMethod, HttpResponseMessage response, string url)
+        /// <summary>
+        /// Add a response message for a specific http method on a given url.
+        /// </summary>
+        /// <param name="httpMethod">The http method that needs to be used in order to get the response</param>
+        /// <param name="url">The full url that needs to be used in order to get the response</param>
+        /// <param name="response">The response to return</param>
+        /// <returns>The instance of the <see cref="FakeHttpClientBuilder"/></returns>
+        /// <exception cref="ArgumentNullException"></exception>
+        public FakeHttpClientBuilder AddResponse(HttpMethod httpMethod, string url, HttpResponseMessage response)
         {
             if (string.IsNullOrWhiteSpace(url))
             {
@@ -26,6 +37,10 @@ namespace TestHelpers.Fakes
             return this;
         }
 
+        /// <summary>
+        /// Builds an <see cref="HttpClient"/> that uses the <see cref="FakeHttpMessageHandler"/> you programmed
+        /// </summary>
+        /// <returns>The programmed <see cref="HttpClient"/></returns>
         public HttpClient Build()
         {
             var httpMessageHandlerStub = new FakeHttpMessageHandler(_responses);

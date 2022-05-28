@@ -2,6 +2,9 @@
 
 namespace TestHelpers.Fakes
 {
+    /// <summary>
+    /// Programmable message handler that you can configure to give specific responses to requests.
+    /// </summary>
     public class FakeHttpMessageHandler : HttpMessageHandler
     {
         public IEnumerable<HttpRequestMessage> ExecutedRequests { get; private set; } = Enumerable.Empty<HttpRequestMessage>();
