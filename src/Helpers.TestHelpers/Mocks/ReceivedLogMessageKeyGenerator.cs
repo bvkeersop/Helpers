@@ -5,9 +5,9 @@ namespace Helpers.TestHelpers.Mocks
     internal static class ReceivedLogMessageKeyGenerator
     {
         private const string _seperator = ":";
-        public static string GenerateKey(ReceivedLogEvent receivedLogEvent)
+        public static string GenerateKey(LogEntry receivedLogEvent)
         {
-            return $"{receivedLogEvent.Level}{_seperator}{receivedLogEvent.Message}";
+            return $"{receivedLogEvent.LogLevel}{_seperator}{receivedLogEvent.Message}";
         }
 
         public static (LogLevel, string) GetKeyValues(string key)

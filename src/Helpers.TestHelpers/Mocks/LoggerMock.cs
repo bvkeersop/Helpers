@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using System.Text.RegularExpressions;
 
 namespace Helpers.TestHelpers.Mocks
 {
@@ -6,12 +7,20 @@ namespace Helpers.TestHelpers.Mocks
     /// A LoggerMock to use inside of unit tests in order to assert in messages are logged.
     /// Exposes aditional functionality to easily query for logs.
     /// See: https://github.com/nsubstitute/NSubstitute/issues/597 why we need a class for this in some cases.
-    /// TODO: Expand with Expressions
     /// </summary>
     /// <typeparam name="T">The category name of the Logger</typeparam>
     public class LoggerMock<T> : ILogger<T>
     {
-        private readonly Stack<ReceivedLogEvent> _events = new();
+        private readonly Stack<LogEntry> _receivedLogEntries = new Stack<LogEntry>();
+
+        /// <summary>
+        /// Get a cloned stack of the received log events.
+        /// </summary>
+        /// <returns>A cloned stack of the log events</returns>
+        public Stack<LogEntry> GetReceivedLogEntries()
+        {
+            return new Stack<LogEntry>(_receivedLogEntries);
+        }
 
         public IDisposable BeginScope<TState>(TState state)
         {
@@ -25,7 +34,7 @@ namespace Helpers.TestHelpers.Mocks
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
         {
-            _events.Push(new ReceivedLogEvent(logLevel, state?.ToString()));
+            _receivedLogEntries.Push(new LogEntry(logLevel, state?.ToString()));
         }
 
         /// <summary>
@@ -36,32 +45,70 @@ namespace Helpers.TestHelpers.Mocks
         /// <exception cref="Exception"></exception>
         public void Received(LogLevel level, string message)
         {
-            var matchedEventsCount = _events.Count(e => e.Level == level && e.Message == message);
+            var matchedLogEntriesCount = _receivedLogEntries.Count(e => e.LogLevel == level && e.Message == message);
 
-            if (matchedEventsCount < 1)
+            if (matchedLogEntriesCount < 1)
             {
-                throw new Exception($"Expected atleast 1 call(s) to Log with the following arguments: '{level}', '{message}'. Actually received: {matchedEventsCount}");
+                throw new Exception($"Expected atleast 1 call(s) to Log with the following arguments: '{level}', '{message}'. Actually received: {matchedLogEntriesCount}");
+            }
+        }
+
+        /// <summary>
+        /// Check that a certain log event matching the specified pattern is received atleast once.
+        /// </summary>
+        /// <param name="level">The log level</param>
+        /// <param name="regex">The regex pattern that is matched for</param>
+        /// <exception cref="Exception"></exception>
+        public void Received(LogLevel level, Regex regex)
+        {
+            var matchedLogEntriesCount = _receivedLogEntries.Count(l => l.LogLevel == level && (l.Message != null && regex.IsMatch(l.Message)));
+
+            if (matchedLogEntriesCount < 1)
+            {
+                throw new Exception($"Expected atleast 1 call(s) to Log with the following arguments: '{level}', '{regex}'. Actually received: {matchedLogEntriesCount}");
             }
         }
 
         /// <summary>
         /// Check that certain log events are received atleast once.
         /// </summary>
-        /// <param name="level">The log level</param>
-        /// <param name="message">The log message.</param>
+        /// <param name="expectedLogEntries">The <see cref="LogEntry"/> that are supposed to be received</param>
         /// <exception cref="Exception"></exception>
-        public void Received(params ReceivedLogEvent[] receivedLogEvents)
+        public void Received(params LogEntry[] expectedLogEntries)
         {
-            var expectedLogEventsDictionary = new Dictionary<string, IEnumerable<ReceivedLogEvent>>();
-
-            foreach (var receivedLogEvent in receivedLogEvents)
+            foreach (var expectedLogEntry in expectedLogEntries)
             {
-                CreateReceivedLogEventDictionary(expectedLogEventsDictionary, receivedLogEvent);
+                if (expectedLogEntry.Message != null)
+                {
+                    Received(expectedLogEntry.LogLevel, expectedLogEntry.Message);
+                }
+                else if (expectedLogEntry.Regex != null)
+                {
+                    Received(expectedLogEntry.LogLevel, expectedLogEntry.Regex);
+                }
             }
+        }
 
-            var receivedLogEventsDictionary = GetReceivedEventsDictionary();
-
-            CompareExpectedLogEventsToReceivedLogEvents(expectedLogEventsDictionary, receivedLogEventsDictionary);
+        /// <summary>
+        /// Check that certain log events are received exactly in order, with no trailing logs.
+        /// </summary>
+        /// <param name="expectedLogEntries">The <see cref="LogEntry"/> that are supposed to be received</param>
+        /// <exception cref="Exception"></exception>
+        public void ReceivedExactly(params LogEntry[] expectedLogEntries)
+        {
+            for (int i = 0; i < expectedLogEntries.Length; i++)
+            {
+                var expectedLogEvent = expectedLogEntries.ElementAt(i);
+                try
+                {
+                    var receivedLogEvent = _receivedLogEntries.Reverse().ElementAt(i);
+                    AssertReceivedLogEvent(expectedLogEvent, receivedLogEvent);
+                }
+                catch (ArgumentOutOfRangeException e)
+                {
+                    throw new Exception($"Expected a call to Log with the following arguments: '{expectedLogEvent.LogLevel}', '{expectedLogEvent.Message}'. But no calls found.", e);
+                }
+            }
         }
 
         /// <summary>
@@ -72,61 +119,66 @@ namespace Helpers.TestHelpers.Mocks
         /// <exception cref="Exception"></exception>
         public void ReceivedOnce(LogLevel level, string message)
         {
-            var matchedEventsCount = _events.Count(e => e.Level == level && e.Message == message);
+            var matchedEventsCount = _receivedLogEntries.Count(e => e.LogLevel == level && e.Message == message);
 
             if (matchedEventsCount != 1)
             {
-                throw new Exception($"Expected 1 call(s) to Log with the following arguments: '{level}', '{message}'. Actually received: {matchedEventsCount}");
+                throw new Exception($"Expected exactly 1 call to Log with the following arguments: '{level}', '{message}'. Actually received: {matchedEventsCount}");
             }
         }
 
-        private Dictionary<string, IEnumerable<ReceivedLogEvent>> GetReceivedEventsDictionary()
+        /// <summary>
+        /// Check that a certain log event matching the specified pattern is received exactly once.
+        /// </summary>
+        /// <param name="level">The log level</param>
+        /// <param name="regex">The regex to match the message against</param>
+        /// <exception cref="Exception"></exception>
+        public void ReceivedOnce(LogLevel level, Regex regex)
         {
-            var receivedLogEventDictionary = new Dictionary<string, IEnumerable<ReceivedLogEvent>>();
+            var matchedEventsCount = _receivedLogEntries.Count(l => l.LogLevel == level && (l.Message != null && regex.IsMatch(l.Message)));
 
-            foreach (var receivedLogEvent in _events)
+            if (matchedEventsCount != 1)
             {
-                CreateReceivedLogEventDictionary(receivedLogEventDictionary, receivedLogEvent);
-            }
-
-            return receivedLogEventDictionary;
-        }
-
-        private static void CreateReceivedLogEventDictionary(
-            Dictionary<string, IEnumerable<ReceivedLogEvent>> receivedLogEventDictionary,
-            ReceivedLogEvent receivedLogEvent)
-        {
-            var key = ReceivedLogMessageKeyGenerator.GenerateKey(receivedLogEvent);
-            if (receivedLogEventDictionary.ContainsKey(key))
-            {
-                receivedLogEventDictionary[key] = receivedLogEventDictionary[key].Append(receivedLogEvent);
-            }
-            else
-            {
-                receivedLogEventDictionary.Add(key, new List<ReceivedLogEvent> { receivedLogEvent });
+                throw new Exception($"Expected exactly 1 call to Log with the following arguments: '{level}', '{regex}'. Actually received: {matchedEventsCount}");
             }
         }
 
-        private static void CompareExpectedLogEventsToReceivedLogEvents(
-            Dictionary<string, IEnumerable<ReceivedLogEvent>> expected,
-            Dictionary<string, IEnumerable<ReceivedLogEvent>> actual)
+        private static void AssertReceivedLogEvent(LogEntry expectedLogEntry, LogEntry receivedLogEntry)
         {
-            foreach (var receivedLogEvent in expected)
-            {
-                var numberOfExpectedCalls = receivedLogEvent.Value.Count();
-                var contains = actual.TryGetValue(receivedLogEvent.Key, out var values);
-                if (!contains)
-                {
-                    var (logLevel, message) = ReceivedLogMessageKeyGenerator.GetKeyValues(receivedLogEvent.Key);
-                    throw new Exception($"Expected {numberOfExpectedCalls} call(s) to Log with the following arguments: '{logLevel}', '{message}'. Actually received: 0");
-                }
+            AssertLogLevel(expectedLogEntry, receivedLogEntry);
 
-                var numberOfActualCalls = actual[receivedLogEvent.Key].Count();
-                if (!(numberOfExpectedCalls == numberOfActualCalls))
-                {
-                    var (logLevel, message) = ReceivedLogMessageKeyGenerator.GetKeyValues(receivedLogEvent.Key);
-                    throw new Exception($"Expected {numberOfExpectedCalls} call(s) to Log with the following arguments: '{logLevel}', '{message}'. Actually received: {numberOfActualCalls}");
-                }
+            if (expectedLogEntry.Message != null)
+            {
+                AssertLogMessage(expectedLogEntry, receivedLogEntry);
+            }
+
+            if (expectedLogEntry.Regex != null)
+            {
+                AssertLogRegex(expectedLogEntry, receivedLogEntry);
+            }
+        }
+
+        private static void AssertLogLevel(LogEntry expectedLogEntry, LogEntry receivedLogEntry)
+        {
+            if (receivedLogEntry.LogLevel != expectedLogEntry.LogLevel)
+            {
+                throw new Exception($"Expected a call to Log with the following arguments: '{expectedLogEntry.LogLevel}', '{expectedLogEntry.Message}'. Actually received: '{receivedLogEntry.LogLevel}', '{receivedLogEntry.Message}'.");
+            }
+        }
+
+        private static void AssertLogMessage(LogEntry expectedLogEntry, LogEntry receivedLogEntry)
+        {
+            if (receivedLogEntry.Message != expectedLogEntry.Message)
+            {
+                throw new Exception($"Expected a call to Log with the following arguments: '{expectedLogEntry.LogLevel}', '{expectedLogEntry.Message}'. Actually received: '{receivedLogEntry.LogLevel}', '{receivedLogEntry.Message}'.");
+            }
+        }
+
+        private static void AssertLogRegex(LogEntry expectedLogEntry, LogEntry receivedLogEntry)
+        {
+            if (receivedLogEntry.Message != expectedLogEntry.Message)
+            {
+                throw new Exception($"Expected a call to Log with the following arguments: '{expectedLogEntry.LogLevel}', '{expectedLogEntry.Message}'. Actually received: '{receivedLogEntry.LogLevel}', '{receivedLogEntry.Message}'.");
             }
         }
     }

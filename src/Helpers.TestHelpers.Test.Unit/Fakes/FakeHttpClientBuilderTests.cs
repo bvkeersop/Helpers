@@ -23,7 +23,7 @@ namespace Helpers.TestHelpers.Test.Unit.Fakes
             var combinedUrl = _baseUrl + _subUrl;
             var response = new HttpResponseMessageBuilder().Build();
             var fakeHttpClient = new FakeHttpClientBuilder(_baseUrl)
-                .AddResponse(HttpMethod.Post, response, _subUrl)
+                .AddResponse(HttpMethod.Post, _subUrl, response)
                 .Build();
 
             // Act
@@ -41,7 +41,7 @@ namespace Helpers.TestHelpers.Test.Unit.Fakes
             var combinedUrl = _baseUrl + _subUrl;
             var response = new HttpResponseMessageBuilder().Build();
             var fakeHttpClient = new FakeHttpClientBuilder(_baseUrl)
-                .AddResponse(HttpMethod.Post, response, _subUrl)
+                .AddResponse(HttpMethod.Post, _subUrl, response)
                 .Build();
 
             // Act
@@ -59,7 +59,7 @@ namespace Helpers.TestHelpers.Test.Unit.Fakes
             var differentUrl = _baseUrl + "/some-other-test-sub-url";
             var response = new HttpResponseMessageBuilder().Build();
             var fakeHttpClient = new FakeHttpClientBuilder(_baseUrl)
-                .AddResponse(HttpMethod.Post, response, _subUrl)
+                .AddResponse(HttpMethod.Post, _subUrl, response)
                 .Build();
 
             // Act
